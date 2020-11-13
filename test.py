@@ -15,43 +15,50 @@ device = torch.device("cuda" if use_cuda else "cpu")
 # hyperparameters
 parser = argparse.ArgumentParser()
 parser.add_argument('--voca', default=True, type=lambda x: (str(x).lower() == 'true'))
+#parser.add_argument('--pre', type=bool,default=False)
+parser.add_argument('--index', default='c')
 parser.add_argument('--audio_dir', type=str, default='./test')
 parser.add_argument('--save_dir', type=str, default='./test')
 parser.add_argument('--model_file', type=str, default='model_file')
 parser.add_argument('--normal_file', type=str, default='normal_file')
 args = parser.parse_args()
 
-config = HParams.load("config/run_config_idx1.yaml")
+config = HParams.load("config/run_config_idx{}.yaml".format(args.index))
+try:
+    os.mkdir('./test/result/'+args.save_dir)
+except:
+    pass
 
-if args.voca is True:
-    config.feature['large_voca'] = True
-    config.model['num_chords'] = 170
-    #model_file = './test/btc_model_large_voca.pt'
-    model_file = './data/assets/model/'+args.model_file
-    normal_file = './data/result/'+args.normal_file
-    idx_to_chord = idx2voca_chord()
-    logger.info("label type: large voca")
-else:
-    model_file = './test/btc_model.pt'
-    idx_to_chord = idx2chord
-    logger.info("label type: Major and minor")
-
+config.feature['large_voca'] = True
+config.model['num_chords'] = 170
 model = BTC_model(config=config.model).to(device)
+#print('==========',args.pre)
+#if args.pre :
+    
+#     config.model['num_chords'] = 170
+#     model_file = './data/assets/model/'+args.model_file
+#     idx_to_chord = idx2voca_chord()
+#     checkpoint = torch.load(model_file)
+#     mean = checkpoint['mean']
+#     std = checkpoint['std']
+#     model.load_state_dict(checkpoint['model'])
+#     logger.info("restore model")
 
-# Load model
-if os.path.isfile(normal_file):
-    print('==== load mean & std ====')
-    
-    checkpoint = torch.load(model_file)
-    model.load_state_dict(checkpoint['model'])
-    
-    checkpoint = torch.load(normal_file)
-    mean = checkpoint['mean']
-    std = checkpoint['std']
-    logger.info("restore model")
+#else:    
+model_file = './data/assets/model/'+args.model_file
+normal_file = './data/result/'+args.normal_file
+
+idx_to_chord = idx2voca_chord()    
+checkpoint = torch.load(model_file)
+model.load_state_dict(checkpoint['model'])
+
+checkpoint = torch.load(normal_file)
+mean = checkpoint['mean']
+std = checkpoint['std']
+logger.info("restore model")
 
 # Audio files with format of wav and mp3
-audio_paths = get_audio_paths(args.audio_dir)
+audio_paths = get_audio_paths('./test/mp3/'+args.audio_dir)
 
 # Chord recognition and save lab file
 for i, audio_path in enumerate(audio_paths):
