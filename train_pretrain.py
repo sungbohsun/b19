@@ -18,25 +18,21 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--index', type=int, help='Experiment Number', default='1')
+parser.add_argument('--index', type=int, help='Experiment Number', default='0')
 parser.add_argument('--kfold', type=int, help='5 fold (0,1,2,3,4)',default='3')
 parser.add_argument('--voca', type=bool, help='large voca is True', default=True)
 parser.add_argument('--model', type=str, help='btc, cnn, crnn', default='btc')
 #-----
 parser.add_argument('--dataset1', type=str, help='Dataset', default='ce200')
-parser.add_argument('--dataset2', type=str, help='Dataset', default='NA')
-parser.add_argument('--dataset3', type=str, help='Dataset', default='NA')
 #-----
 #parser.add_argument('--dataset1', type=str, help='Dataset', default='isophonic')
 #parser.add_argument('--dataset2', type=str, help='Dataset', default='uspop')
 #parser.add_argument('--dataset3', type=str, help='Dataset', default='robbiewilliams')
-parser.add_argument('--restore_epoch', type=int, default=1000)
+parser.add_argument('--restore_epoch', type=int, default=1)
 parser.add_argument('--early_stop', type=bool, help='no improvement during 10 epoch -> stop', default=True)
 args = parser.parse_args()
 
-experiment_num = str(args.index)
-config = HParams.load("config/run_config_idx"+experiment_num+".yaml")
-
+config = HParams.load("config/run_config_idx0.yaml")
 if args.voca == True:
     config.feature['large_voca'] = True
     config.model['num_chords'] = 170
@@ -46,7 +42,7 @@ asset_path = config.path['asset_path']
 ckpt_path = config.path['ckpt_path']
 result_path = config.path['result_path']
 restore_epoch = args.restore_epoch
-#experiment_num = str(args.index)
+experiment_num = str(args.index)
 ckpt_file_name = 'idx_'+experiment_num+'_%03d.pt'
 tf_logger = TF_Logger(os.path.join(asset_path, 'tensorboard', 'idx_'+experiment_num))
 logger.info("==== Experiment Number : %d " % args.index)
@@ -98,8 +94,9 @@ if not os.path.exists(os.path.join(asset_path, ckpt_path)):
 if os.path.isfile(os.path.join(asset_path, ckpt_path, ckpt_file_name % restore_epoch)):
     checkpoint = torch.load(os.path.join(asset_path, ckpt_path, ckpt_file_name % restore_epoch))
     model.load_state_dict(checkpoint['model'])
-    optimizer.load_state_dict(checkpoint['optimizer'])
-    epoch = checkpoint['epoch']
+    #optimizer.load_state_dict(checkpoint['optimizer'])
+    #epoch = checkpoint['epoch']
+    epoch = 1
     logger.info("restore model with %d epochs" % restore_epoch)
 else:
     logger.info("no checkpoint with %d epochs" % restore_epoch)

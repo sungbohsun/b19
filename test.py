@@ -17,14 +17,18 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--voca', default=True, type=lambda x: (str(x).lower() == 'true'))
 parser.add_argument('--audio_dir', type=str, default='./test')
 parser.add_argument('--save_dir', type=str, default='./test')
+parser.add_argument('--model_file', type=str, default='model_file')
+parser.add_argument('--normal_file', type=str, default='normal_file')
 args = parser.parse_args()
 
-config = HParams.load("run_config.yaml")
+config = HParams.load("config/run_config_idx1.yaml")
 
 if args.voca is True:
     config.feature['large_voca'] = True
     config.model['num_chords'] = 170
-    model_file = './test/btc_model_large_voca.pt'
+    #model_file = './test/btc_model_large_voca.pt'
+    model_file = './data/assets/model/'+args.model_file
+    normal_file = './data/result/'+args.normal_file
     idx_to_chord = idx2voca_chord()
     logger.info("label type: large voca")
 else:
@@ -35,11 +39,15 @@ else:
 model = BTC_model(config=config.model).to(device)
 
 # Load model
-if os.path.isfile(model_file):
+if os.path.isfile(normal_file):
+    print('==== load mean & std ====')
+    
     checkpoint = torch.load(model_file)
+    model.load_state_dict(checkpoint['model'])
+    
+    checkpoint = torch.load(normal_file)
     mean = checkpoint['mean']
     std = checkpoint['std']
-    model.load_state_dict(checkpoint['model'])
     logger.info("restore model")
 
 # Audio files with format of wav and mp3
