@@ -6,6 +6,7 @@ from btc_model import *
 from utils.mir_eval_modules import audio_file_to_features, idx2chord, idx2voca_chord, get_audio_paths
 import argparse
 import warnings
+from baseline_models import CNN, CRNN
 
 warnings.filterwarnings('ignore')
 logger.logging_verbosity(1)
@@ -16,6 +17,7 @@ device = torch.device("cuda" if use_cuda else "cpu")
 parser = argparse.ArgumentParser()
 parser.add_argument('--voca', default=True, type=lambda x: (str(x).lower() == 'true'))
 #parser.add_argument('--pre', type=bool,default=False)
+parser.add_argument('--model', default='btc')
 parser.add_argument('--index', default='c')
 parser.add_argument('--audio_dir', type=str, default='./test')
 parser.add_argument('--save_dir', type=str, default='./test')
@@ -24,14 +26,18 @@ parser.add_argument('--normal_file', type=str, default='normal_file')
 args = parser.parse_args()
 
 config = HParams.load("config/run_config_idx{}.yaml".format(args.index))
-try:
-    os.mkdir('./test/result/'+args.save_dir)
-except:
-    pass
+
+
 
 config.feature['large_voca'] = True
 config.model['num_chords'] = 170
-model = BTC_model(config=config.model).to(device)
+if args.model == 'cnn':
+    model = CNN(config=config.model).to(device)
+elif args.model == 'crnn':
+    model = CRNN(config=config.model).to(device)
+elif args.model == 'btc':
+    model = BTC_model(config=config.model).to(device)
+else: raise NotImplementedError
 #print('==========',args.pre)
 #if args.pre :
     
@@ -101,9 +107,10 @@ for i, audio_path in enumerate(audio_paths):
                     break
 
     # lab file write
-    if not os.path.exists(args.save_dir):
-        os.makedirs(args.save_dir)
-    save_path = os.path.join(args.save_dir, os.path.split(audio_path)[-1].replace('.mp3', '').replace('.wav', '') + '.lab')
+    save_dir = './test/result/'+args.save_dir
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    save_path = os.path.join(save_dir, os.path.split(audio_path)[-1].replace('.mp3', '').replace('.wav', '') + '.lab')
     with open(save_path, 'w') as f:
         for line in lines:
             f.write(line)
