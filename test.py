@@ -6,7 +6,6 @@ from btc_model import *
 from utils.mir_eval_modules import audio_file_to_features, idx2chord, idx2voca_chord, get_audio_paths
 import argparse
 import warnings
-from baseline_models import CNN, CRNN
 
 warnings.filterwarnings('ignore')
 logger.logging_verbosity(1)
@@ -32,23 +31,15 @@ config = HParams.load("config/run_config_idx{}.yaml".format(args.index))
 config.feature['large_voca'] = True
 config.model['num_chords'] = 170
 if args.model == 'cnn':
+    from baseline_models_test import CNN, CRNN
     model = CNN(config=config.model).to(device)
 elif args.model == 'crnn':
+    from baseline_models_test import CNN, CRNN
     model = CRNN(config=config.model).to(device)
 elif args.model == 'btc':
+    from baseline_models import CNN, CRNN
     model = BTC_model(config=config.model).to(device)
 else: raise NotImplementedError
-#print('==========',args.pre)
-#if args.pre :
-    
-#     config.model['num_chords'] = 170
-#     model_file = './data/assets/model/'+args.model_file
-#     idx_to_chord = idx2voca_chord()
-#     checkpoint = torch.load(model_file)
-#     mean = checkpoint['mean']
-#     std = checkpoint['std']
-#     model.load_state_dict(checkpoint['model'])
-#     logger.info("restore model")
 
 #else:    
 model_file = './data/assets/model/'+args.model_file
@@ -89,9 +80,12 @@ for i, audio_path in enumerate(audio_paths):
         model.eval()
         feature = torch.tensor(feature, dtype=torch.float32).unsqueeze(0).to(device)
         for t in range(num_instance):
-            self_attn_output, _ = model.self_attn_layers(feature[:, n_timestep * t:n_timestep * (t + 1), :])
-            prediction, _ = model.output_layer(self_attn_output)
-            prediction = prediction.squeeze()
+            if args.model == 'btc':
+                self_attn_output, _ = model.self_attn_layers(feature[:, n_timestep * t:n_timestep * (t + 1), :])
+                prediction, _ = model.output_layer(self_attn_output)
+                prediction = prediction.squeeze()
+            else:
+                prediction = model(feature[:, n_timestep * t:n_timestep * (t + 1), :])
             for i in range(n_timestep):
                 if t == 0 and i == 0:
                     prev_chord = prediction[i].item()
