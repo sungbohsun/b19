@@ -6,6 +6,7 @@ from btc_model import *
 from utils.mir_eval_modules import audio_file_to_features, idx2chord, idx2voca_chord, get_audio_paths
 import argparse
 import warnings
+from baseline_models_test import CNN, CRNN, Crf
 
 warnings.filterwarnings('ignore')
 logger.logging_verbosity(1)
@@ -31,13 +32,10 @@ config = HParams.load("config/run_config_idx{}.yaml".format(args.index))
 config.feature['large_voca'] = True
 config.model['num_chords'] = 170
 if args.model == 'cnn':
-    from baseline_models_test import CNN, CRNN
     model = CNN(config=config.model).to(device)
 elif args.model == 'crnn':
-    from baseline_models_test import CNN, CRNN
     model = CRNN(config=config.model).to(device)
 elif args.model == 'btc':
-    from baseline_models import CNN, CRNN
     model = BTC_model(config=config.model).to(device)
 else: raise NotImplementedError
 

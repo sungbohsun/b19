@@ -18,19 +18,22 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--index', type=int, help='Experiment Number', default='e')
-parser.add_argument('--kfold', type=int, help='5 fold (0,1,2,3,4)',default='e')
-parser.add_argument('--voca', type=bool, help='large voca is True', default=False)
+parser.add_argument('--index', type=int, help='Experiment Number', default='4')
+parser.add_argument('--kfold', type=int, help='5 fold (0,1,2,3,4)',default='3')
+parser.add_argument('--voca', type=bool, help='large voca is True', default=True)
 parser.add_argument('--model', type=str, default='crf')
-parser.add_argument('--pre_model', type=str, help='btc, cnn, crnn', default='e')
-parser.add_argument('--dataset1', type=str, help='Dataset', default='isophonic_221')
-parser.add_argument('--dataset2', type=str, help='Dataset', default='uspop_185')
-parser.add_argument('--dataset3', type=str, help='Dataset', default='robbiewilliams')
-parser.add_argument('--restore_epoch', type=int, default=1000)
-parser.add_argument('--early_stop', type=bool, help='no improvement during 10 epoch -> stop', default=True)
+parser.add_argument('--pre_model', type=str, help='btc, cnn, crnn', default='cnn')
+parser.add_argument('--load_ckpt_file_name', type=str, help='load_ckpt_file_name', default='load_ckpt_file_name')
+parser.add_argument('--dataset1', type=str, help='Dataset', default='ce200')
+parser.add_argument('--dataset2', type=str, help='Dataset', default='NA')
+parser.add_argument('--dataset3', type=str, help='Dataset', default='NA')
+parser.add_argument('--restore_epoch', type=int, default=10)
+parser.add_argument('--early_stop', type=bool, help='no improvement during 10 epoch -> stop', default=20)
 args = parser.parse_args()
 
-config = HParams.load("run_config.yaml")
+load_ckpt_file_name = args.load_ckpt_file_name
+experiment_num = str(args.index)
+config = HParams.load("config/run_config_idx"+experiment_num+".yaml")
 if args.voca == True:
     config.feature['large_voca'] = True
     config.model['num_chords'] = 170
@@ -43,7 +46,7 @@ ckpt_path = config.path['ckpt_path']
 result_path = config.path['result_path']
 restore_epoch = args.restore_epoch
 experiment_num = str(args.index)
-ckpt_file_name = 'idx_'+experiment_num+'_%03d.pth.tar'
+ckpt_file_name = 'idx_'+experiment_num+'_%03d_crf.pt'
 tf_logger = TF_Logger(os.path.join(asset_path, 'tensorboard', 'idx_'+experiment_num))
 logger.info("==== Experiment Number : %d " % args.index)
 
@@ -52,15 +55,29 @@ if args.pre_model == 'cnn':
 
 # Data loader
 train_dataset1 = AudioDataset(config, root_dir=config.path['root_path'], dataset_names=(args.dataset1,), num_workers=20, preprocessing=False, train=True, kfold=args.kfold)
-train_dataset2 = AudioDataset(config, root_dir=config.path['root_path'], dataset_names=(args.dataset2,), num_workers=20, preprocessing=False, train=True, kfold=args.kfold)
-train_dataset3 = AudioDataset(config, root_dir=config.path['root_path'], dataset_names=(args.dataset3,), num_workers=20, preprocessing=False, train=True, kfold=args.kfold)
-train_dataset = train_dataset1.__add__(train_dataset2).__add__(train_dataset3)
 valid_dataset1 = AudioDataset(config, root_dir=config.path['root_path'], dataset_names=(args.dataset1,), preprocessing=False, train=False, kfold=args.kfold)
-valid_dataset2 = AudioDataset(config, root_dir=config.path['root_path'], dataset_names=(args.dataset2,), preprocessing=False, train=False, kfold=args.kfold)
-valid_dataset3 = AudioDataset(config, root_dir=config.path['root_path'], dataset_names=(args.dataset3,), preprocessing=False, train=False, kfold=args.kfold)
-valid_dataset = valid_dataset1.__add__(valid_dataset2).__add__(valid_dataset3)
+train_dataset = train_dataset1
+valid_dataset = valid_dataset1
+
+if args.dataset2 != 'NA':
+    
+    train_dataset2 = AudioDataset(config, root_dir=config.path['root_path'], dataset_names=(args.dataset2,), \
+                                  num_workers=20, preprocessing=False, train=True, kfold=args.kfold)    
+    valid_dataset2 = AudioDataset(config, root_dir=config.path['root_path'], dataset_names=(args.dataset2,), preprocessing=False, train=False, kfold=args.kfold)    
+    train_dataset = train_dataset.__add__(train_dataset2)
+    valid_dataset = valid_dataset.__add__(valid_dataset2)
+
+if args.dataset3 != 'NA':
+    
+    train_dataset3 = AudioDataset(config, root_dir=config.path['root_path'], dataset_names=(args.dataset3,), \
+                                  num_workers=20, preprocessing=False, train=True, kfold=args.kfold)
+    valid_dataset3 = AudioDataset(config, root_dir=config.path['root_path'], dataset_names=(args.dataset3,), preprocessing=False, train=False, kfold=args.kfold)    
+    train_dataset = train_dataset.__add__(train_dataset3)    
+    valid_dataset = valid_dataset.__add__(valid_dataset3)
+    
 train_dataloader = AudioDataLoader(dataset=train_dataset, batch_size=config.experiment['batch_size'], drop_last=False, shuffle=True)
 valid_dataloader = AudioDataLoader(dataset=valid_dataset, batch_size=config.experiment['batch_size'], drop_last=False)
+
 
 # Model and Optimizer
 if args.pre_model == 'cnn':
@@ -71,22 +88,21 @@ elif args.pre_model == 'btc':
     pre_model = BTC_model(config=config.model).to(device)
 else: raise NotImplementedError
 
-if args.pre_model == 'cnn':
-    if args.voca == False:
-        if args.kfold == 0:
-            load_ckpt_file_name = 'idx_0_%03d.pth.tar'
-            load_restore_epoch = 10
-    else:
-        if args.kfold == 0:
-            load_ckpt_file_name = 'idx_1_%03d.pth.tar'
-            load_restore_epoch = 10
-else:
-    raise NotImplementedError
-
-if os.path.isfile(os.path.join(asset_path, ckpt_path, load_ckpt_file_name % load_restore_epoch)):
-    checkpoint = torch.load(os.path.join(asset_path, ckpt_path, load_ckpt_file_name % load_restore_epoch))
+# if args.pre_model == 'cnn':
+#     if args.voca == False:
+#         if args.kfold == 0:
+#             load_ckpt_file_name = 'idx_0_%03d.pth.tar'
+#             load_restore_epoch = 10
+#     else:
+#         if args.kfold == 0:
+#             load_ckpt_file_name = 'idx_1_%03d.pth.tar'
+#             load_restore_epoch = 10
+# else:
+#     raise NotImplementedError
+if os.path.isfile(os.path.join(asset_path, ckpt_path, load_ckpt_file_name )):
+    checkpoint = torch.load(os.path.join(asset_path, ckpt_path, load_ckpt_file_name ))
     pre_model.load_state_dict(checkpoint['model'])
-    logger.info("restore pre model with %d epochs" % load_restore_epoch)
+    logger.info("restore pre model " )
 else:
     raise NotImplementedError
 
@@ -103,7 +119,6 @@ if not os.path.exists(os.path.join(asset_path, ckpt_path)):
     os.makedirs(os.path.join(asset_path, ckpt_path))
     os.makedirs(os.path.join(asset_path, result_path))
 
-# Load model
 if os.path.isfile(os.path.join(asset_path, ckpt_path, ckpt_file_name % restore_epoch)):
     checkpoint = torch.load(os.path.join(asset_path, ckpt_path, ckpt_file_name % restore_epoch))
     crf.load_state_dict(checkpoint['model'])
@@ -119,7 +134,7 @@ mp3_config = config.mp3
 feature_config = config.feature
 mp3_string = "%d_%.1f_%.1f" % (mp3_config['song_hz'], mp3_config['inst_len'], mp3_config['skip_interval'])
 feature_string = "_%s_%d_%d_%d_" % ('cqt', feature_config['n_bins'], feature_config['bins_per_octave'], feature_config['hop_length'])
-z_path = os.path.join(config.path['root_path'], 'result', mp3_string + feature_string + 'mix_kfold_'+ str(args.kfold) +'_normalization.pt')
+z_path = os.path.join(config.path['root_path'], 'result', mp3_string + feature_string + 'mix_kfold_'+ str(args.kfold) +'_index'+ str(experiment_num) +'.pt')
 if os.path.exists(z_path):
     normalization = torch.load(z_path)
     mean = normalization['mean']
@@ -250,34 +265,34 @@ for epoch in range(restore_epoch, config.experiment['max_epoch']):
         adjusting_learning_rate(optimizer=optimizer, factor=0.95, min_lr=5e-6)
     before_acc = current_acc
 
-# Load model
-if os.path.isfile(os.path.join(asset_path, ckpt_path, ckpt_file_name % last_best_epoch)):
-    checkpoint = torch.load(os.path.join(asset_path, ckpt_path, ckpt_file_name % last_best_epoch))
-    crf.load_state_dict(checkpoint['model'])
-    logger.info("last best restore model with %d epochs" % last_best_epoch)
-else:
-    raise NotImplementedError
+# # Load model
+# if os.path.isfile(os.path.join(asset_path, ckpt_path, ckpt_file_name % last_best_epoch)):
+#     checkpoint = torch.load(os.path.join(asset_path, ckpt_path, ckpt_file_name % last_best_epoch))
+#     crf.load_state_dict(checkpoint['model'])
+#     logger.info("last best restore model with %d epochs" % last_best_epoch)
+# else:
+#     raise NotImplementedError
 
-# score Validation
-if args.voca == True:
-    score_metrics = ['root', 'thirds', 'triads', 'sevenths', 'tetrads', 'majmin', 'mirex']
-    score_list_dict1, song_length_list1, average_score_dict1 = large_voca_score_calculation_crf(valid_dataset=valid_dataset1, config=config, pre_model=pre_model, model=crf, model_type=args.pre_model, mean=mean, std=std, device=device)
-    score_list_dict2, song_length_list2, average_score_dict2 = large_voca_score_calculation_crf(valid_dataset=valid_dataset2, config=config, pre_model=pre_model, model=crf, model_type=args.pre_model, mean=mean, std=std, device=device)
-    score_list_dict3, song_length_list3, average_score_dict3 = large_voca_score_calculation_crf(valid_dataset=valid_dataset3, config=config, pre_model=pre_model, model=crf, model_type=args.pre_model, mean=mean, std=std, device=device)
-    for m in score_metrics:
-        average_score = (np.sum(song_length_list1) * average_score_dict1[m] + np.sum(song_length_list2) *average_score_dict2[m] + np.sum(song_length_list3) * average_score_dict3[m]) / (np.sum(song_length_list1) + np.sum(song_length_list2) + np.sum(song_length_list3))
-        logger.info('==== %s score 1 is %.4f' % (m, average_score_dict1[m]))
-        logger.info('==== %s score 2 is %.4f' % (m, average_score_dict2[m]))
-        logger.info('==== %s score 3 is %.4f' % (m, average_score_dict3[m]))
-        logger.info('==== %s mix average score is %.4f' % (m, average_score))
-else:
-    score_metrics = ['root', 'majmin']
-    score_list_dict1, song_length_list1, average_score_dict1 = root_majmin_score_calculation_crf(valid_dataset=valid_dataset1, config=config, pre_model=pre_model, model=crf, model_type=args.pre_model, mean=mean, std=std, device=device)
-    score_list_dict2, song_length_list2, average_score_dict2 = root_majmin_score_calculation_crf(valid_dataset=valid_dataset2, config=config, pre_model=pre_model, model=crf, model_type=args.pre_model, mean=mean, std=std, device=device)
-    score_list_dict3, song_length_list3, average_score_dict3 = root_majmin_score_calculation_crf(valid_dataset=valid_dataset3, config=config, pre_model=pre_model, model=crf, model_type=args.pre_model, mean=mean, std=std, device=device)
-    for m in score_metrics:
-        average_score = (np.sum(song_length_list1) * average_score_dict1[m] + np.sum(song_length_list2) *average_score_dict2[m] + np.sum(song_length_list3) * average_score_dict3[m]) / (np.sum(song_length_list1) + np.sum(song_length_list2) + np.sum(song_length_list3))
-        logger.info('==== %s score 1 is %.4f' % (m, average_score_dict1[m]))
-        logger.info('==== %s score 2 is %.4f' % (m, average_score_dict2[m]))
-        logger.info('==== %s score 3 is %.4f' % (m, average_score_dict3[m]))
-        logger.info('==== %s mix average score is %.4f' % (m, average_score))
+# # score Validation
+# if args.voca == True:
+#     score_metrics = ['root', 'thirds', 'triads', 'sevenths', 'tetrads', 'majmin', 'mirex']
+#     score_list_dict1, song_length_list1, average_score_dict1 = large_voca_score_calculation_crf(valid_dataset=valid_dataset1, config=config, pre_model=pre_model, model=crf, model_type=args.pre_model, mean=mean, std=std, device=device)
+#     score_list_dict2, song_length_list2, average_score_dict2 = large_voca_score_calculation_crf(valid_dataset=valid_dataset2, config=config, pre_model=pre_model, model=crf, model_type=args.pre_model, mean=mean, std=std, device=device)
+#     score_list_dict3, song_length_list3, average_score_dict3 = large_voca_score_calculation_crf(valid_dataset=valid_dataset3, config=config, pre_model=pre_model, model=crf, model_type=args.pre_model, mean=mean, std=std, device=device)
+#     for m in score_metrics:
+#         average_score = (np.sum(song_length_list1) * average_score_dict1[m] + np.sum(song_length_list2) *average_score_dict2[m] + np.sum(song_length_list3) * average_score_dict3[m]) / (np.sum(song_length_list1) + np.sum(song_length_list2) + np.sum(song_length_list3))
+#         logger.info('==== %s score 1 is %.4f' % (m, average_score_dict1[m]))
+#         logger.info('==== %s score 2 is %.4f' % (m, average_score_dict2[m]))
+#         logger.info('==== %s score 3 is %.4f' % (m, average_score_dict3[m]))
+#         logger.info('==== %s mix average score is %.4f' % (m, average_score))
+# else:
+#     score_metrics = ['root', 'majmin']
+#     score_list_dict1, song_length_list1, average_score_dict1 = root_majmin_score_calculation_crf(valid_dataset=valid_dataset1, config=config, pre_model=pre_model, model=crf, model_type=args.pre_model, mean=mean, std=std, device=device)
+#     score_list_dict2, song_length_list2, average_score_dict2 = root_majmin_score_calculation_crf(valid_dataset=valid_dataset2, config=config, pre_model=pre_model, model=crf, model_type=args.pre_model, mean=mean, std=std, device=device)
+#     score_list_dict3, song_length_list3, average_score_dict3 = root_majmin_score_calculation_crf(valid_dataset=valid_dataset3, config=config, pre_model=pre_model, model=crf, model_type=args.pre_model, mean=mean, std=std, device=device)
+#     for m in score_metrics:
+#         average_score = (np.sum(song_length_list1) * average_score_dict1[m] + np.sum(song_length_list2) *average_score_dict2[m] + np.sum(song_length_list3) * average_score_dict3[m]) / (np.sum(song_length_list1) + np.sum(song_length_list2) + np.sum(song_length_list3))
+#         logger.info('==== %s score 1 is %.4f' % (m, average_score_dict1[m]))
+#         logger.info('==== %s score 2 is %.4f' % (m, average_score_dict2[m]))
+#         logger.info('==== %s score 3 is %.4f' % (m, average_score_dict3[m]))
+#         logger.info('==== %s mix average score is %.4f' % (m, average_score))
